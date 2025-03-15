@@ -1,81 +1,130 @@
-import os
 import json
-from typing import List, Dict, Any
-from pydantic import BaseModel, Field, ValidationError
-
-import openai  # requires openai>=1.0.0
-
-
-# -----------------------------------------------------------------
-# 1) Define a Pydantic Model for Home Assistant Commands
-# -----------------------------------------------------------------
-class HomeAssistantCommand(BaseModel):
-    action: str
-    devices: List[str] = Field(default_factory=list)
-    params: Dict[str, Any] = Field(default_factory=dict)
+import requests
+from enum import Enum
+from typing import Optional
+from pydantic import BaseModel, ValidationError
 
 
-# -----------------------------------------------------------------
-# 2) LLM Function Using the New OpenAI API (>=1.0.0)
-# -----------------------------------------------------------------
-def generate_ha_command(user_input: str, model: str = "gpt-3.5-turbo") -> HomeAssistantCommand:
-    """
-    Takes a user input like 'Turn on the living room light' and returns
-    a validated HomeAssistantCommand via the new ChatCompletion API.
-    """
+# Define the allowed request types with descriptions embedded in the enum.
+class RequestType(str, Enum):
+    CONVERSATIONAL = ("conversational", "For general inquiries or instructions.")
+    DEVICE_CHANGE = ("device_change", "For adding or removing devices.")
+    PRESET_CHANGE = ("preset_change", "For adding, removing, or modifying presets/scenes.")
+    DEVICE_ACTION = ("device_action", "For turning devices on/off or performing direct actions.")
 
-    # Set your API key (replace with your real key or environment variable)
-    openai.api_key = os.getenv("OPENAI_API_KEY", "sk-REPLACE_ME")
+    def __new__(cls, value, description):
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.description = description
+        return obj
 
-    # Prompt: instruct the LLM to output strictly valid JSON matching our schema
-    system_message = (
-        "You are a helpful assistant that outputs ONLY valid JSON with the following schema:\n\n"
-        "HomeAssistantCommand:\n"
-        "  action (str)\n"
-        "  devices (list of strings)\n"
-        "  params (dict)\n\n"
-        "Constraints:\n"
-        "  - Do not include markdown, code blocks, or extra text.\n"
-        "  - Output must be strictly valid JSON, nothing else.\n"
-        "  - If unsure, make a best guess.\n"
+
+# Pydantic model for the classification result.
+class RequestClassification(BaseModel):
+    request_type: RequestType
+    description: Optional[str] = None
+
+
+def llm_classification_request(
+        user_input: str,
+        mistral_endpoint: str = "http://localhost:11434/api/generate",
+        model_name: str = "mistral",
+        max_retries: int = 3
+) -> RequestClassification:
+    # Dynamically generate allowed request types from the enum.
+    allowed_requests = "\n".join(
+        [f"{rt.value}: {rt.description}" for rt in RequestType]
     )
 
-    user_message = (
-        f"The user said: {user_input}\n"
-        "Return a JSON object matching the schema above."
+    system_instructions = (
+        "You are a helpful assistant that categorizes Home Assistant requests into one of the following types:\n"
+        f"{allowed_requests}\n\n"
+        "Return a JSON object with two fields:\n"
+        "  'request_type': one of the above request types (only the key, e.g., 'device_action')\n"
+        "  'description': a short explanation for your classification.\n"
+        "Output ONLY the JSON without any extra text or markdown."
     )
 
-    # Call the new ChatCompletion interface
-    response = openai.ChatCompletion.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_message},
-            {"role": "user", "content": user_message},
-        ],
-        temperature=0.0,  # 0.0 for the most deterministic response
-    )
+    full_prompt = f"{system_instructions}\nUser input: {user_input}\n"
 
-    # Extract the raw text (JSON) from the LLM
-    raw_json = response.choices[0].message.content.strip()
+    payload = {
+        "model": model_name,
+        "prompt": full_prompt,
+        "temperature": 0.0,
+        "stream": False
+    }
 
-    # -----------------------------------------------------------------
-    # 3) Parse the JSON and Validate with Pydantic
-    # -----------------------------------------------------------------
+    for attempt in range(1, max_retries + 1):
+        print(f"Attempt #{attempt} to classify request...")
+        try:
+            response = requests.post(mistral_endpoint, json=payload)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            print(f"HTTP error contacting LLM: {e}")
+            continue
+
+        try:
+            content = response.json()
+        except json.JSONDecodeError as e:
+            print(f"Error decoding JSON from LLM response: {e}")
+            continue
+
+        if "response" not in content:
+            print("LLM response missing 'response' field:")
+            print(content)
+            continue
+
+        raw_text = content["response"].strip()
+        print("LLM raw classification output:")
+        print(raw_text)
+
+        try:
+            data = json.loads(raw_text)
+        except json.JSONDecodeError as e:
+            print(f"Failed to parse LLM output as JSON: {e}")
+            print("LLM returned:")
+            print(raw_text)
+            continue
+
+        try:
+            classification = RequestClassification(**data)
+            print("Successfully classified the request!")
+            return classification
+        except ValidationError as e:
+            print("❌ Schema validation error:")
+            print(e)
+            print("Data returned by LLM:")
+            print(json.dumps(data, indent=2))
+            continue
+
+    raise ValueError(f"Failed to classify request after {max_retries} attempt(s).")
+
+
+# --- Handler for device action requests (renamed from 'action_request') ---
+def handle_device_action_request(user_input: str):
+    print("Handling device action request...")
+    print(f"User input: {user_input}")
+    # Stub: Here you would implement the logic to process a device action
+    print("Stub: Executing device action (e.g., turning device on/off).")
+
+
+# --- Dispatcher / Main Flow ---
+def dispatch_request(user_input: str):
     try:
-        data = json.loads(raw_json)  # Convert JSON string → dict
-        command = HomeAssistantCommand(**data)  # Validate
-        return command
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to decode JSON. LLM Output:\n{raw_json}") from e
-    except ValidationError as e:
-        raise ValueError(f"LLM JSON does not match the HomeAssistantCommand schema:\n{e}") from e
+        classification = llm_classification_request(user_input)
+    except ValueError as e:
+        print("Error classifying request:", e)
+        return
+
+    print(f"Request classified as: {classification.request_type}")
+    print(f"LLM explanation: {classification.description}")
+
+    if classification.request_type == RequestType.DEVICE_ACTION:
+        handle_device_action_request(user_input)
+    else:
+        print("Only device action requests are implemented at this time.")
 
 
-# -----------------------------------------------------------------
-# 4) Example Usage
-# -----------------------------------------------------------------
 if __name__ == "__main__":
-    user_request = "Turn on the living room light"
-    ha_command = generate_ha_command(user_request)
-    print("Parsed Home Assistant command:")
-    print(ha_command.dict())
+    user_input = input("Enter your Home Assistant request: turn on the main light")
+    dispatch_request(user_input)
