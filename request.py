@@ -126,5 +126,5 @@ def dispatch_request(user_input: str):
 
 
 if __name__ == "__main__":
-    user_input = input("Enter your Home Assistant request: turn on the main light")
+    user_input = input("Enter your Home Assistant request")
     dispatch_request(user_input)

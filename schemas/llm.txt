@@ -1,0 +1,56 @@
+# Schemas Directory Documentation
+
+## ABSTRACTIONS
+
+### Classes
+- `HomeAssistantCommand`: Pydantic model for structured Home Assistant command output from LLM with:
+  - `action`: Command action to perform (string)
+  - `devices`: List of device identifiers to target
+  - `params`: Dictionary of additional parameters for the action
+
+## CODE STRUCTURE
+
+### File Organization
+- `home_assistant_schema.py`: Contains Pydantic models for structured data validation
+
+### Design Patterns
+- Uses Pydantic for data validation and schema definition
+- Field defaults implemented using `Field(default_factory=list/dict)` to avoid mutable default issues
+
+## DEPENDENCIES
+
+### External Libraries
+- `pydantic`: For data validation and schema definition
+- `typing`: For type annotations (List, Dict, Any)
+
+## USAGE
+
+### How to Use
+The HomeAssistantCommand model can be used to parse and validate command data:
+
+```python
+from schemas.home_assistant_schema import HomeAssistantCommand
+
+# Create a command instance
+command = HomeAssistantCommand(
+    action="turn_on",
+    devices=["light.living_room", "light.kitchen"],
+    params={"brightness": 255, "color_temp": 300}
+)
+
+# Validate command data
+# (Pydantic will raise ValidationError if data doesn't match schema)
+
+# Access command properties
+action = command.action
+devices = command.devices
+params = command.params
+```
+
+### Example Usage Patterns
+- Validating LLM output before sending to Home Assistant
+- Structuring data for API requests
+- Ensuring consistency in command formats
+
+## REFERENCES
+- `llm.txt`: Root directory documentation with overall system context 

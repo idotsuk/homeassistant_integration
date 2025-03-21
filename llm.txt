@@ -1,0 +1,78 @@
+# Home Assistant Integration - Root Directory Documentation
+
+## ABSTRACTIONS
+
+### Classes
+- `RequestType (Enum)`: Defines types of requests that can be made to Home Assistant (conversational, device_change, preset_change, device_action)
+- `RequestClassification`: Pydantic model for classifying user requests with request_type and description fields
+- `HomeAssistantCommand`: Pydantic model for structured command output with action, devices, and params fields
+
+### Functions
+- `llm_classification_request`: Sends user input to LLM to classify the request type
+- `handle_device_action_request`: Handles device action requests (e.g., turning devices on/off)
+- `dispatch_request`: Routes request to appropriate handler based on classification
+- `get_all_devices`: Retrieves all devices from Home Assistant API
+- `toggle_tv_on_off`: Toggles a TV on/off using Home Assistant API
+
+### Constants and Configuration
+- `BAE_URL`: Base URL for Home Assistant API
+- `AUTH_TOEKN`: Authentication token for Home Assistant API
+- `paths`: Endpoints for different Home Assistant services
+- `devices_path`: Paths for different device types
+- `devices`: Maps device names to their entity IDs
+- `commands`: Maps command names to their API calls
+
+## CODE STRUCTURE
+
+### File Organization
+- `main.py`: Entry point with Home Assistant API integration examples
+- `request.py`: Request classification and handling logic
+- `schemas/`: Directory containing data models
+- `requirements.txt`: Python dependencies
+- `.env`: Environment variables (Home Assistant URL and auth token)
+- `README.md`: Project documentation
+
+### Control Flow
+1. User provides input request for Home Assistant
+2. Request is classified using LLM into one of predefined types
+3. Based on classification, appropriate handler is called
+4. Handler executes actions through Home Assistant API
+
+## DEPENDENCIES
+
+### External Libraries
+- `requests`: HTTP requests to Home Assistant API
+- `pydantic`: Data validation and schema definition
+- `python-dotenv`: Loading environment variables
+- `json`: JSON parsing and serialization
+- `enum`: Enum type definition
+
+### Environment Variables
+- `HOME_ASSISTANT_BAE_URL`: Base URL for Home Assistant API
+- `HOME_ASSISTANT_TOEKN`: Authentication token for Home Assistant API
+
+### API Integrations
+- Home Assistant REST API: Used for controlling devices and retrieving state
+
+## USAGE
+
+### How to Use
+1. Set up environment variables in `.env` file with Home Assistant URL and token
+2. Run `python main.py` for basic Home Assistant API interaction examples
+3. For request classification, use `dispatch_request(user_input)` function
+
+### Example Usage
+```python
+from request import dispatch_request
+
+# Example: Process a user request
+dispatch_request("Turn off the living room lights")
+```
+
+### Common Errors
+- Authentication failures if token is invalid
+- Connection errors if Home Assistant is not accessible
+- JSON parsing errors if API responses are malformed
+
+## REFERENCES
+- `schemas/llm.txt`: Documentation for data models and schemas 
