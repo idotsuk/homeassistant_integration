@@ -6,6 +6,8 @@
 - `RequestType (Enum)`: Defines types of requests that can be made to Home Assistant (conversational, device_change, preset_change, device_action)
 - `RequestClassification`: Pydantic model for classifying user requests with request_type and description fields
 - `HomeAssistantCommand`: Pydantic model for structured command output with action, devices, and params fields
+- `HomeAssistantRequest`: Pydantic model for the API request body containing a user query
+- `HomeAssistantResponse`: Pydantic model for the API response with request_type, description, status, message, and devices
 
 ### Functions
 - `llm_classification_request`: Sends user input to LLM to classify the request type
@@ -13,6 +15,10 @@
 - `dispatch_request`: Routes request to appropriate handler based on classification
 - `get_all_devices`: Retrieves all devices from Home Assistant API
 - `toggle_tv_on_off`: Toggles a TV on/off using Home Assistant API
+- `health_check`: API endpoint function that returns the health status of the service
+- `get_devices`: API endpoint function that returns all devices from Home Assistant
+- `toggle_tv`: API endpoint function that toggles the TV on/off
+- `process_request`: API endpoint function that processes user queries and returns structured responses
 
 ### Constants and Configuration
 - `BAE_URL`: Base URL for Home Assistant API
@@ -25,7 +31,8 @@
 ## CODE STRUCTURE
 
 ### File Organization
-- `main.py`: Entry point with Home Assistant API integration examples
+- `main.py`: FastAPI application with endpoints for processing natural language requests
+- `home_assistant.py`: Home Assistant API integration functions
 - `request.py`: Request classification and handling logic
 - `schemas/`: Directory containing data models
 - `requirements.txt`: Python dependencies
@@ -33,14 +40,18 @@
 - `README.md`: Project documentation
 
 ### Control Flow
-1. User provides input request for Home Assistant
-2. Request is classified using LLM into one of predefined types
-3. Based on classification, appropriate handler is called
-4. Handler executes actions through Home Assistant API
+1. User sends a request to the `/api/request` endpoint with a query
+2. The system fetches the current state of all devices from Home Assistant
+3. The query is forwarded to `dispatch_request` function in request.py
+4. Request is classified using LLM into one of predefined types
+5. Based on classification, appropriate handler is called
+6. Results are captured and returned as a structured API response, including device states
 
 ## DEPENDENCIES
 
 ### External Libraries
+- `fastapi`: Web framework for creating API endpoints
+- `uvicorn`: ASGI server to run the FastAPI application
 - `requests`: HTTP requests to Home Assistant API
 - `pydantic`: Data validation and schema definition
 - `python-dotenv`: Loading environment variables
@@ -50,29 +61,46 @@
 ### Environment Variables
 - `HOME_ASSISTANT_BAE_URL`: Base URL for Home Assistant API
 - `HOME_ASSISTANT_TOEKN`: Authentication token for Home Assistant API
+- `PORT`: Port number for the FastAPI server (defaults to 8000)
 
 ### API Integrations
 - Home Assistant REST API: Used for controlling devices and retrieving state
+- Local Mistral LLM endpoint: Used for request classification
 
 ## USAGE
 
 ### How to Use
 1. Set up environment variables in `.env` file with Home Assistant URL and token
-2. Run `python main.py` for basic Home Assistant API interaction examples
-3. For request classification, use `dispatch_request(user_input)` function
+2. Run `python main.py` to start the FastAPI server
+3. Access the API endpoints:
+   - `/api/devices` - GET: Retrieve all devices from Home Assistant
+   - `/api/tv/toggle` - POST: Toggle the TV on/off
+   - `/api/request` - POST: Process a natural language request
+   - `/health` - GET: Check the service status
 
 ### Example Usage
-```python
-from request import dispatch_request
+```bash
+# Start the server
+python main.py
 
-# Example: Process a user request
-dispatch_request("Turn off the living room lights")
+# Get all devices
+curl -X GET "http://localhost:8000/api/devices"
+
+# Toggle the TV
+curl -X POST "http://localhost:8000/api/tv/toggle"
+
+# Send a natural language request
+curl -X POST "http://localhost:8000/api/request" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Turn off the living room lights"}'
 ```
 
 ### Common Errors
 - Authentication failures if token is invalid
 - Connection errors if Home Assistant is not accessible
 - JSON parsing errors if API responses are malformed
+- 400 error if query is empty
+- 500 error if request processing fails
 
 ## REFERENCES
 - `schemas/llm.txt`: Documentation for data models and schemas 
